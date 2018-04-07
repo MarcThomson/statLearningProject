@@ -12,6 +12,8 @@ List of Features
   * av Coord
   * av bond length for every type of bond
   * N(bond)/N(atom)
+  * Volume/ Atom
+  * Concentration of each atom
 * From elemental properties
   * Average Mass
   * Average Radii (covalent + ionic)
