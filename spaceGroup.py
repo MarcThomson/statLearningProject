@@ -16,4 +16,4 @@ def spaceGroup(dfSpaceGroup):
         newData = pd.DataFrame({str(uniques[i]):spacegroup==uniques[i]})
         dfOut = pd.concat([dfOut, newData],axis = 1)
     dfOut = 1*dfOut
-    return dfOut
+    return dfOut,uniques
