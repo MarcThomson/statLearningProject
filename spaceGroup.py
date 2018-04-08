@@ -6,7 +6,7 @@ Created on Sat Apr  7 15:00:18 2018
 """
 
 import pandas as pd
-DF =pd.read_csv('train.csv')
+DF = pd.read_csv('train.csv')
 spacegroup = DF['spacegroup']
 
 def spaceGroup(dfSpaceGroup):
