@@ -228,7 +228,7 @@ def xyzFeats(df, dataset):
                                "In_O_mean" : in_o_mean,
                                "O_coord" : o_coord}
         
-    fout = 'xyz_feats.csv'
+    fout = 'test_xyz_feats.csv'
     with open(fout, 'w') as f:
         f.write('Al_coord, Al_O_mean, Ga_coord, Ga_O_mean, In_coord, In_O_mean, O_coord\n')
         for idx in xyz_feats_dict:
@@ -238,7 +238,7 @@ def xyzFeats(df, dataset):
             f.write(','.join(seq)+'\n')
 
 def main():
-    fin = 'train.csv'
+    fin = 'test.csv'
     df_train = pd.read_csv(fin)
     df_train.head()
     properties = get_prop_list()
@@ -275,12 +275,12 @@ def main():
     df_train = pd.concat([df_train, df_SG], axis=1)
     df_train = df_train.drop(['id', 'spacegroup'], axis=1)
     
-    dataset = 'train'
-    #
-   xyzFeats(df_train, dataset)
+    dataset = 'test'
+    
+    xyzFeats(df_train, dataset)
  
     return df_train
 
 if __name__ == '__main__':
     df_train = main()
-    df_train.to_csv('train_no_xyz.csv', index=False)
+    df_train.to_csv('test_no_xyz.csv', index=False)

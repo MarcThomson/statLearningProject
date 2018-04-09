@@ -15,10 +15,10 @@ def combineData(fin_1, fin_2):
     return df_1
 
 def main():
-    fin_1 = 'train_no_xyz.csv'
-    fin_2 = 'xyz_feats.csv'
+    fin_1 = 'test_no_xyz.csv'
+    fin_2 = 'test_xyz_feats.csv'
     df = combineData(fin_1, fin_2)
-    fout = 'feats.csv'
+    fout = 'test_feats.csv'
     df.to_csv(fout, index=False)
 
 if __name__ == '__main__':
