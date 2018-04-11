@@ -12,20 +12,8 @@ import pandas as pd
 import numpy as np
 import os
 from numpy.linalg import inv
-import itertools
-from numba import jit
 
-def getTrain(fin):
-    """
-    Args:
-        fin (str) - training data filename
-    Returns:
-        DataFrame of training data
-    """
-    df = pd.read_csv(fin)
-    return df
-
-def get_prop_list():
+def getPropList():
     """
     Args:
         path_to_element_data (str) - path to folder of elemental property files
@@ -70,7 +58,42 @@ def avgProp(x_Al, x_Ga, x_In, prop, prop_dict):
     concentration_dict = dict(zip(els, [x_Al, x_Ga, x_In]))
     return np.sum(prop_dict[prop][el] * concentration_dict[el] for el in els)
 
-def getVol(a, b, c, alpha, beta, gamma):
+def getStdProps(df):
+    """
+    Args:
+        stuf
+    Returns:
+        df (DataFrame) - data with property features appended
+    """
+    properties = getPropList()
+    # make nested dictionary which maps {property (str) : {element (str) : property value (float)}}
+    prop_dict = {prop : getProp(prop) for prop in properties}
+    for prop in properties:
+        df['_'.join(['avg', prop])] = avgProp(df['percent_atom_al'], 
+                                              df['percent_atom_ga'],
+                                              df['percent_atom_in'],
+                                              prop,
+                                              prop_dict)
+    return df
+
+def deg2Rad(df):
+    """
+    Args:
+        df (DataFrame) - dataset
+    Returns:
+        df_out (DataFrame) - dataset with degrees converted to radians
+    """
+    lattice_angles = ['lattice_angle_alpha_degree',
+                      'lattice_angle_beta_degree',
+                      'lattice_angle_gamma_degree']
+    for lang in lattice_angles:
+        df['_'.join([lang, 'r'])] = np.pi * df[lang] / 180
+    df_out = df.drop(['lattice_angle_alpha_degree',
+                  'lattice_angle_beta_degree',
+                  'lattice_angle_gamma_degree'], axis=1)
+    return df_out
+
+def getVol(df):
     """
     Args:
         a (float) - lattice vector 1
@@ -84,34 +107,71 @@ def getVol(a, b, c, alpha, beta, gamma):
     Source:
         https://www.kaggle.com/cbartel/random-forest-using-elemental-properties
     """
-    return a*b*c*np.sqrt(1 + 2*np.cos(alpha)*np.cos(beta)*np.cos(gamma)
+    a = df['lattice_vector_1_ang']
+    b = df['lattice_vector_2_ang']
+    c = df['lattice_vector_3_ang']
+    alpha = df['lattice_angle_alpha_degree_r']
+    beta = df['lattice_angle_beta_degree_r']
+    gamma = df['lattice_angle_gamma_degree_r']
+    vol =  a*b*c*np.sqrt(1 + 2*np.cos(alpha)*np.cos(beta)*np.cos(gamma)
                            - np.cos(alpha)**2
                            - np.cos(beta)**2
                            - np.cos(gamma)**2)
-def spaceGroup(dfSpaceGroup):
-    uniques = list(set(dfSpaceGroup))
-    dfOut = pd.DataFrame()
+    df['vol'] = vol
+    return df
+
+def getAtomDens(df):
+    """
+    Args:
+        df (DataFrame) - dataset
+    Returns:
+        df (DataFrame) - dataset with atomic density feature appended
+    """
+    df['atomic_density'] = df['number_of_total_atoms'] / df['vol']
+    return df
+
+def spaceGroup(df):
+    """
+    Args:
+        df (DataFrame) - training or testing data
+    Returns:
+        df (DataFrame) - training or testing data with spacegroup features appended
+    """
+    uniques = list(set(df['spacegroup']))
+    df_out = pd.DataFrame()
     for i in range(len(uniques)):
-        newData = pd.DataFrame({'SG_'+str(uniques[i]):dfSpaceGroup==uniques[i]})
-        dfOut = pd.concat([dfOut, newData],axis = 1)
-    dfOut = 1*dfOut
-    return dfOut
+        newData = pd.DataFrame({'SG_' + str(uniques[i]) : df['spacegroup'] == uniques[i]})
+        df_out = pd.concat([df_out, newData],axis = 1)
+    df_out = 1 * df_out
+    df_out = pd.concat([df_train, df_out], axis=1)
+    df_out = df_out.drop(['id', 'spacegroup'], axis=1)
+    return df_out
 
 def length(v):
     """
+    Args:
+        v (vector)
+    Returns:
+        d (float) - norm of vector
     Source:
         https://www.kaggle.com/tonyyy/how-to-get-atomic-coordinates
     """
-    return np.linalg.norm(v)
+    d = np.linalg.norm(v)
+    return d
 
-def get_xyz_data(filename):
+def getXyzData(fin):
     """
+    Args:
+        fin (str) - file contraining lattice data
+    Returns:
+        pos_data () - atomic coordinates
+        lat_data (matrix) - lattice vectors
     Source:
         https://www.kaggle.com/tonyyy/how-to-get-atomic-coordinates
     """
     pos_data = []
     lat_data = []
-    with open(filename) as f:
+    with open(fin) as f:
         for line in f.readlines():
             x = line.split()
             if x[0] == 'atom':
@@ -120,8 +180,14 @@ def get_xyz_data(filename):
                 lat_data.append(np.array(x[1:4], dtype=np.float))
     return pos_data, np.array(lat_data)
 
-def get_shortest_distances(reduced_coords, amat):
+def getShortestDistances(reduced_coords, amat):
     """
+    Args:
+        reduced_coords () -  ?
+        amat (matrix) - ?
+    Returns:
+        dists () - ?
+        Rij_min () - ?
     Source:
         https://www.kaggle.com/tonyyy/how-to-get-atomic-coordinates
     """
@@ -149,8 +215,14 @@ def get_shortest_distances(reduced_coords, amat):
             Rij_min[j, i] = -Rij_min[i, j]
     return dists, Rij_min
 
-def get_min_length(distances, A_atoms, B_atoms):
+def getMinLength(distances, A_atoms, B_atoms):
     """
+    Args:
+        distances () - ?
+        A_atoms () - ?
+        B_atoms () - ?
+    Returns:
+        A_B_length () - ?
     Source:
         https://www.kaggle.com/tonyyy/how-to-get-atomic-coordinates
     """
@@ -160,20 +232,23 @@ def get_min_length(distances, A_atoms, B_atoms):
             d = distances[i, j]
             if d > 1e-8 and d < A_B_length:
                 A_B_length = d
-    
     return A_B_length   
 
 def xyzFeats(df, dataset):
+    """
+    Args:
+        df (DataFrame) - dataset
+        dataset (str) - file type: either train or test
+    """
     xyz_feats_dict = {}
     for idx in range(1,len(df.index)+1):
         fn = "{}/{}/geometry.xyz".format(dataset, idx)
-        crystal_xyz, crystal_lat = get_xyz_data(fn)
+        crystal_xyz, crystal_lat = getXyzData(fn)
         A = np.transpose(crystal_lat)
         R = crystal_xyz[0][0]
         B = inv(A)
-        r = np.matmul(B, R)
         crystal_red = [[np.matmul(B, R), symbol] for (R, symbol) in crystal_xyz]
-        crystal_dist, crystal_Rij = get_shortest_distances(crystal_red, A)
+        crystal_dist, crystal_Rij = getShortestDistances(crystal_red, A)
         natom = len(crystal_red)
         al_atoms = [i for i in range(natom) if crystal_red[i][1] == 'Al']
         ga_atoms = [i for i in range(natom) if crystal_red[i][1] == 'Ga']
@@ -190,7 +265,7 @@ def xyzFeats(df, dataset):
         in_coord = 0
         in_o_mean = 0
         if len(al_atoms):
-            al_length = 1.30 * get_min_length(crystal_dist, al_atoms, o_atoms)
+            al_length = 1.30 * getMinLength(crystal_dist, al_atoms, o_atoms)
             for i in range(len(al_atoms)):
                 for j in range(len(o_atoms)):
                     al_o_dist[i,j] = crystal_dist[al_atoms[i], o_atoms[j]]
@@ -200,7 +275,7 @@ def xyzFeats(df, dataset):
             al_coord = len(al_o_dist) / len(al_atoms)
             al_o_mean = np.mean(al_o_dist)
         if len(ga_atoms):
-            ga_length = 1.30 * get_min_length(crystal_dist, ga_atoms, o_atoms)
+            ga_length = 1.30 * getMinLength(crystal_dist, ga_atoms, o_atoms)
             for i in range(len(ga_atoms)):
                 for j in range(len(o_atoms)):
                     ga_o_dist[i,j] = crystal_dist[ga_atoms[i], o_atoms[j]]
@@ -210,7 +285,7 @@ def xyzFeats(df, dataset):
             ga_coord = len(ga_o_dist) / len(ga_atoms)
             ga_o_mean = np.mean(ga_o_dist)
         if len(in_atoms):
-            in_length = 1.30 * get_min_length(crystal_dist, in_atoms, o_atoms)
+            in_length = 1.30 * getMinLength(crystal_dist, in_atoms, o_atoms)
             for i in range(len(in_atoms)):
                 for j in range(len(o_atoms)):
                     in_o_dist[i,j] = crystal_dist[in_atoms[i], o_atoms[j]]
@@ -228,7 +303,7 @@ def xyzFeats(df, dataset):
                                "In_O_mean" : in_o_mean,
                                "O_coord" : o_coord}
         
-    fout = 'test_xyz_feats.csv'
+    fout = '{}_xyz_feats.csv'.format(dataset)
     with open(fout, 'w') as f:
         f.write('Al_coord, Al_O_mean, Ga_coord, Ga_O_mean, In_coord, In_O_mean, O_coord\n')
         for idx in xyz_feats_dict:
@@ -238,49 +313,25 @@ def xyzFeats(df, dataset):
             f.write(','.join(seq)+'\n')
 
 def main():
-    fin = 'test.csv'
-    df_train = pd.read_csv(fin)
-    df_train.head()
-    properties = get_prop_list()
-    
-    # make nested dictionary which maps {property (str) : {element (str) : property value (float)}}
-    prop_dict = {prop : getProp(prop) for prop in properties}
-
-    for prop in properties:
-        df_train['_'.join(['avg', prop])] = avgProp(df_train['percent_atom_al'], 
-                                                 df_train['percent_atom_ga'],
-                                                 df_train['percent_atom_in'],
-                                                 prop,
-                                                 prop_dict)
+    fins = ['train.csv', 'test.csv']
+    for fin in fins:
+        df = pd.read_csv(fin)
+        df = getStdProps(df)
+        df = deg2Rad(df) 
+        df = getVol(df)
+        df = getAtomDens(df)
+        df = spaceGroup(df)
         
-    # convert lattice angles from degrees to radians for volume calculation
-    lattice_angles = ['lattice_angle_alpha_degree',
-                      'lattice_angle_beta_degree',
-                      'lattice_angle_gamma_degree']
-    
-    for lang in lattice_angles:
-        df_train['_'.join([lang, 'r'])] = np.pi * df_train[lang] / 180
-        
-    # compute the cell volumes 
-    df_train['vol'] = getVol(df_train['lattice_vector_1_ang'], 
-                             df_train['lattice_vector_2_ang'],
-                             df_train['lattice_vector_3_ang'],
-                             df_train['lattice_angle_alpha_degree_r'],
-                             df_train['lattice_angle_beta_degree_r'],
-                             df_train['lattice_angle_gamma_degree_r'])
-    
-    df_train['atomic_density'] = df_train['number_of_total_atoms'] / df_train['vol'] 
-    
-    df_SG = spaceGroup(df_train['spacegroup'])
-    df_train = pd.concat([df_train, df_SG], axis=1)
-    df_train = df_train.drop(['id', 'spacegroup'], axis=1)
-    
-    dataset = 'test'
-    
-    xyzFeats(df_train, dataset)
+        if 'train' in fin:
+            dataset = 'train'
+        elif 'test' in fin:
+            dataset = 'test'
+        else:
+            print('Error!')
+            
+        xyzFeats(df, dataset)
  
-    return df_train
+    return df
 
 if __name__ == '__main__':
-    df_train = main()
-    df_train.to_csv('test_no_xyz.csv', index=False)
+    df = main()
