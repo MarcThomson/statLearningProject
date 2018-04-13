@@ -195,6 +195,7 @@ def getShortestDistances(reduced_coords, amat):
     """
     natom = len(reduced_coords)
     dists = np.zeros((natom, natom))
+    multMat = np.zeros((natom, natom))
     Rij_min = np.zeros((natom, natom, 3))
 
     for i in range(natom):
@@ -208,14 +209,20 @@ def getShortestDistances(reduced_coords, amat):
                         r = rij + np.array([l, m, n])
                         R = np.matmul(amat, r)
                         d = length(R)
-                        if d < d_min:
+                        if abs(d_min-d)/d < 0.05:
+                            d_min = (d_min*mult + d)/(mult+1)
+                            mult = mult + 1
+                        elif d < d_min:
                             d_min = d
                             R_min = R
+                            mult = 1
             dists[i, j] = d_min
             dists[j, i] = dists[i, j]
+            multMat[i,j] = mult
+            multMat[j,i] = mult
             Rij_min[i, j] = R_min
             Rij_min[j, i] = -Rij_min[i, j]
-    return dists, Rij_min
+    return dists, Rij_min, multMat
 
 def getMinLength(distances, A_atoms, B_atoms):
     """
@@ -250,16 +257,16 @@ def xyzFeats(df, dataset):
         R = crystal_xyz[0][0]
         B = inv(A)
         crystal_red = [[np.matmul(B, R), symbol] for (R, symbol) in crystal_xyz]
-        crystal_dist, crystal_Rij = getShortestDistances(crystal_red, A)
+        crystal_dist, crystal_Rij,crystal_mult = getShortestDistances(crystal_red, A)
         natom = len(crystal_red)
         al_atoms = [i for i in range(natom) if crystal_red[i][1] == 'Al']
         ga_atoms = [i for i in range(natom) if crystal_red[i][1] == 'Ga']
         in_atoms = [i for i in range(natom) if crystal_red[i][1] == 'In']
         o_atoms = [i for i in range(natom) if crystal_red[i][1] == 'O']
         al_length, ga_length, in_length = 0, 0, 0
-        al_o_dist = np.zeros([len(al_atoms), len(o_atoms)])
-        ga_o_dist = np.zeros([len(ga_atoms), len(o_atoms)])
-        in_o_dist = np.zeros([len(in_atoms), len(o_atoms)])
+        al_o_dist = np.zeros([9*len(al_atoms)*len(o_atoms),1])
+        ga_o_dist = np.zeros([9*len(ga_atoms)*len(o_atoms),1])
+        in_o_dist = np.zeros([9*len(in_atoms)*len(o_atoms),1])
         al_coord = 0
         al_o_mean = 0
         al_o_4 = 0
@@ -274,36 +281,48 @@ def xyzFeats(df, dataset):
         in_o_2 = 0
         n_atoms = len(al_atoms) + len(ga_atoms) + len(in_atoms)
         if len(al_atoms):
-            al_length = 1.30 * getMinLength(crystal_dist, al_atoms, o_atoms)
+            #al_length = 1.30 * getMinLength(crystal_dist, al_atoms, o_atoms)
+            p = 0
             for i in range(len(al_atoms)):
                 for j in range(len(o_atoms)):
-                    al_o_dist[i,j] = crystal_dist[al_atoms[i], o_atoms[j]]
+                    for k in range(int(crystal_mult[al_atoms[i],o_atoms[j]])):
+                        al_o_dist[p] = crystal_dist[al_atoms[i], o_atoms[j]]
+                        p = p + 1
+            al_o_dist = al_o_dist[np.nonzero(al_o_dist)]
+            al_length  = 1.3*min(al_o_dist)
             al_o_dist = np.select([al_o_dist < al_length], [al_o_dist])
-            al_o_dist = al_o_dist.flatten()
             al_o_dist = al_o_dist[np.nonzero(al_o_dist)]
             al_coord = len(al_o_dist) / len(al_atoms)
             al_o_mean = np.mean(al_o_dist)
             al_o_4 = np.sum(1 / al_o_dist ** 4) / n_atoms
             al_o_2 = np.sum(1 / al_o_dist ** 2) / n_atoms
         if len(ga_atoms):
-            ga_length = 1.30 * getMinLength(crystal_dist, ga_atoms, o_atoms)
+            p = 0
+            #ga_length = 1.30 * getMinLength(crystal_dist, ga_atoms, o_atoms)
             for i in range(len(ga_atoms)):
                 for j in range(len(o_atoms)):
-                    ga_o_dist[i,j] = crystal_dist[ga_atoms[i], o_atoms[j]]
+                    for k in range(int(crystal_mult[ga_atoms[i],o_atoms[j]])):
+                        ga_o_dist[p] = crystal_dist[ga_atoms[i], o_atoms[j]]
+                        p = p + 1
+            ga_o_dist = ga_o_dist[np.nonzero(ga_o_dist)]
+            ga_length  = 1.3*min(ga_o_dist)
             ga_o_dist = np.select([ga_o_dist < ga_length], [ga_o_dist])
-            ga_o_dist = ga_o_dist.flatten()
             ga_o_dist = ga_o_dist[np.nonzero(ga_o_dist)]
             ga_coord = len(ga_o_dist) / len(ga_atoms)
             ga_o_mean = np.mean(ga_o_dist)
             ga_o_4 = np.sum(1 / ga_o_dist ** 4) / n_atoms
             ga_o_2 = np.sum(1 / ga_o_dist ** 2) / n_atoms
         if len(in_atoms):
-            in_length = 1.30 * getMinLength(crystal_dist, in_atoms, o_atoms)
+            p = 0
+            #in_length = 1.30 * getMinLength(crystal_dist, in_atoms, o_atoms)
             for i in range(len(in_atoms)):
                 for j in range(len(o_atoms)):
-                    in_o_dist[i,j] = crystal_dist[in_atoms[i], o_atoms[j]]
+                    for k in range(int(crystal_mult[in_atoms[i],o_atoms[j]])):
+                        in_o_dist[p] = crystal_dist[in_atoms[i], o_atoms[j]]
+                        p = p + 1
+            in_o_dist = in_o_dist[np.nonzero(in_o_dist)]
+            in_length  = 1.3*min(in_o_dist)
             in_o_dist = np.select([in_o_dist < in_length], [in_o_dist])
-            in_o_dist = in_o_dist.flatten()
             in_o_dist = in_o_dist[np.nonzero(in_o_dist)]
             in_coord = len(in_o_dist) / len(in_atoms)
             in_o_mean = np.mean(in_o_dist)
@@ -338,7 +357,7 @@ def combineData(df_1, df_2):
     return df_1
 
 def main():
-    fins = ['train.csv', 'test.csv']
+    fins = ['train.csv','test.csv']
     for fin in fins:
         df = pd.read_csv(fin)
         df = getStdProps(df)
@@ -346,7 +365,6 @@ def main():
         df = getVol(df)
         df = getAtomDens(df)
         df = spaceGroup(df)
-        
         if 'train' in fin:
             dataset = 'train'
             fout = 'train_w_feats.csv'
