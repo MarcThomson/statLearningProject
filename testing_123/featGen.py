@@ -279,6 +279,7 @@ def xyzFeats(df, dataset):
         in_o_mean = 0
         in_o_4 = 0
         in_o_2 = 0
+        outliers = [2372, 985, 2153]
         n_atoms = len(al_atoms) + len(ga_atoms) + len(in_atoms)
         if len(al_atoms):
             #al_length = 1.30 * getMinLength(crystal_dist, al_atoms, o_atoms)
@@ -290,6 +291,8 @@ def xyzFeats(df, dataset):
                         p = p + 1
             al_o_dist = al_o_dist[np.nonzero(al_o_dist)]
             al_length  = 1.3*min(al_o_dist)
+            if idx in outliers:
+                al_length  = 2
             al_o_dist = np.select([al_o_dist < al_length], [al_o_dist])
             al_o_dist = al_o_dist[np.nonzero(al_o_dist)]
             al_coord = len(al_o_dist) / len(al_atoms)
@@ -306,6 +309,8 @@ def xyzFeats(df, dataset):
                         p = p + 1
             ga_o_dist = ga_o_dist[np.nonzero(ga_o_dist)]
             ga_length  = 1.3*min(ga_o_dist)
+            if idx in outliers:
+                ga_length  = 2
             ga_o_dist = np.select([ga_o_dist < ga_length], [ga_o_dist])
             ga_o_dist = ga_o_dist[np.nonzero(ga_o_dist)]
             ga_coord = len(ga_o_dist) / len(ga_atoms)
@@ -314,7 +319,6 @@ def xyzFeats(df, dataset):
             ga_o_2 = np.sum(1 / ga_o_dist ** 2) / n_atoms
         if len(in_atoms):
             p = 0
-            #in_length = 1.30 * getMinLength(crystal_dist, in_atoms, o_atoms)
             for i in range(len(in_atoms)):
                 for j in range(len(o_atoms)):
                     for k in range(int(crystal_mult[in_atoms[i],o_atoms[j]])):
@@ -322,6 +326,8 @@ def xyzFeats(df, dataset):
                         p = p + 1
             in_o_dist = in_o_dist[np.nonzero(in_o_dist)]
             in_length  = 1.3*min(in_o_dist)
+            if idx in outliers:
+                in_length  = 2
             in_o_dist = np.select([in_o_dist < in_length], [in_o_dist])
             in_o_dist = in_o_dist[np.nonzero(in_o_dist)]
             in_coord = len(in_o_dist) / len(in_atoms)
@@ -353,18 +359,26 @@ def xyzFeats(df, dataset):
             f.write(','.join(seq)+'\n')
 
 def combineData(df_1, df_2):
-    df_1 = pd.concat([df_1, df_2],axis = 1)
+    df_1 = pd.concat([df_1, df_2], axis = 1)
     return df_1
+
+def isIn(df):
+    df['Al?'] = (df["percent_atom_al"] > 0.0) * 1
+    df['Ga?'] = (df["percent_atom_ga"] > 0.0) * 1
+    df['In?'] = (df["percent_atom_in"] > 0.0) * 1
+    return df
 
 def main():
     fins = ['train.csv','test.csv']
     for fin in fins:
         df = pd.read_csv(fin)
+        df = isIn(df)
         df = getStdProps(df)
         df = deg2Rad(df) 
         df = getVol(df)
         df = getAtomDens(df)
         df = spaceGroup(df)
+        df = isIn(df)
         if 'train' in fin:
             dataset = 'train'
             fout = 'train_w_feats.csv'

@@ -11,14 +11,20 @@ from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
 from sklearn.ensemble import RandomForestRegressor, ExtraTreesRegressor
 import matplotlib.pyplot as plt
-
-def preProcess(X_train, X_test):
-    std_scaler = StandardScaler()
-    X_train_std = std_scaler.fit_transform(X_train)
-    X_test_std = std_scaler.transform(X_test)
-    return X_train_std, X_test_std
+from sklearn.metrics import mean_absolute_error
+from sklearn.model_selection import train_test_split
 
 def getData(fin_train, fin_test):
+    """Read in training and testing features and targets
+    Args:
+        fin_train (str) - training data filename
+        fin_test (str) - testing data filename
+    Return:
+        X_train (array) - training feature dataset
+        X_test (array) - testing feature dataset
+        y_band (array) - training band targets
+        y_Hf (array) - training Hf targets
+    """
     df = pd.read_csv(fin_train)
     df_train = df.drop(['formation_energy_ev_natom', 'bandgap_energy_ev'], axis=1)
     X_train = df_train.values
@@ -28,40 +34,69 @@ def getData(fin_train, fin_test):
     X_test = df_test.values
     return X_train, X_test, y_band, y_Hf
 
+def preProcess(X_train, X_test, y_band, y_Hf):
+    """Scale training and testing data
+    Args:
+        X_train (array) - training feature dataset
+        X_test (array) -  testing feature dataset
+        protocol (str) - specify analysis
+    Returns:
+        X_train_std (array) - training feature dataset scaled
+        X_test_std (array) - testing feature dataset scaled
+    """
+    std_scaler = StandardScaler()
+    X_train_std = std_scaler.fit_transform(X_train)
+    X_test_std = std_scaler.transform(X_test)
+    return X_train_std, X_test_std
+
+
 def rmsle(real, predicted):
+    """Compute the rmsle score
+    Args:
+        real (array) - targets
+        predicted (array) - predictions
+    Returns rmlse (float) - rmsle score
+    """
     sum=0.0
     for x in range(len(predicted)):
-        if predicted[x]<0 or real[x]<0: #check for negative values
+        if predicted[x] < 0 or real[x] < 0: #check for negative values
             continue
-        p = np.log(predicted[x]+1)
-        r = np.log(real[x]+1)
+        p = np.log(predicted[x] + 1)
+        r = np.log(real[x] + 1)
         sum = sum + (p - r)**2
-    return (sum/len(predicted))**0.5
+    rmsle = (sum / len(predicted))**0.5
+    return rmsle
 
 def randomForest(X_train, X_test, y_band, y_Hf):
-    pipe = make_pipeline(
-           RandomForestRegressor(random_state=42))
+    """
+    Args:
+        X_train (array) - training feature dataset
+        X_test (array) - testing feature dataset
+        y_band (array) - training bandgap targets
+        y_Hf (array) - training Hf targets
+    Returns:
+        y_band_pred (array) - predicted bandgap energy
+        y_Hf_pred (array) - predicted enthalpy of formation
+    """
+    pipe = make_pipeline(RandomForestRegressor(random_state=42))
     band_model = pipe.fit(X_train, y_band)
     y_band_pred = band_model.predict(X_test)
     Hf_model = pipe.fit(X_train, y_Hf)
     y_Hf_pred = Hf_model.predict(X_test)
-    #band_mae = mean_absolute_error(y_band, y_band_pred)
-    #Hf_mae = mean_absolute_error(y_Hf, y_Hf_pred)
-    #print('band mae:', band_mae)
-    #print('hf mae:', Hf_mae)
-    #band_rmsle = rmsle(y_band, y_band_pred)
-    #Hf_rmsle = rmsle(y_Hf, y_Hf_pred)
-    #print('band rmsle:', band_rmsle)
-    #print('hf rmsle:', Hf_rmsle)
     return y_band_pred, y_Hf_pred
 
 def importances(X, y):
+    """Rank and plot features based on Random Forest Importances
+    Args:
+        X (array) - features
+        y (array) - targets
+    Returns:
+        indices (list) - list correspoding to ranked feature order
+    """
     forest = ExtraTreesRegressor(n_estimators=250,
-                                  random_state=42)
+                                 random_state=42)
     forest.fit(X, y)
     importances = forest.feature_importances_
-    std = np.std([tree.feature_importances_ for tree in forest.estimators_],
-                 axis=0)
     indices = np.argsort(importances)[::-1]
     
     # Print the feature ranking
@@ -81,14 +116,24 @@ def importances(X, y):
     return indices
 
 def main():
+    # dataset filenames
     fin_train = 'train_w_feats.csv'
     fin_test = 'test_w_feats.csv'
+    
+    # get datasets
     X_train, X_test, y_band, y_Hf = getData(fin_train, fin_test)
-    X_train, X_test = preProcess(X_train, X_test)
+    
+    # proceed with analysis
+    X_train, X_test = preProcess(X_train, X_test, y_band, y_Hf)
     y_band, y_Hf = randomForest(X_train, X_test, y_band, y_Hf)
-    np.savetxt('band_pred.csv', y_band, delimiter=",")
-    np.savetxt('Hf_pred.csv', y_Hf, delimiter=",")
-    return 0
+    
+    id = [i for i in range(1, 601)]
+    df_sub = pd.DataFrame({'id' : id, 'bandgap_energy_ev' : y_band, 'formation_energy_ev_natom' : y_Hf})
+    df_sub.to_csv(path_or_buf='GOD2.csv', columns=['id', 'formation_energy_ev_natom', 'bandgap_energy_ev'], index=False)
+    
+#    np.savetxt('band_pred.csv', y_band, delimiter=",")
+#    np.savetxt('Hf_pred.csv', y_Hf, delimiter=",")
+    return X_train, X_test, y_band, y_Hf
 
 if __name__ == '__main__':
-    main()
+    X_train, X_test, y_band, y_Hf = main()
